@@ -1,0 +1,29 @@
+services:
+  bank-bot:
+    build:
+      context: . # Точка = текущая папка (корень)
+      dockerfile: Dockerfile.bot # Файл лежит прямо здесь
+    container_name: bank_bot_container
+    ports:
+      - "8000:8000"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0' # Максимум 4 ядра (можно дробные, например '0.5')
+          memory: 4G
+
+  locust:
+    image: docker-locust
+    build:
+      context: .
+      dockerfile: Dockerfile.locust
+    container_name: locust_container
+    ports:
+      - "8089:8089"
+    volumes:
+      - .:/mnt/locust
+    # Важно: запускаем locustfile.py из корня примонтированной папки
+    command: -f /mnt/locust/locustfile.py --host http://bank-bot:8000
+    depends_on:
+      - bank-bot
