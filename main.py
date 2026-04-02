@@ -2,58 +2,79 @@ import sys
 import os
 import asyncio
 import yaml
+import time
+from fastapi import FastAPI, Depends, Query
+from sqlalchemy.orm import Session
 
 # Добавляем корень проекта в пути поиска модулей
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from scenarios.models import Scenario
-from core.virtual_user import VirtualUser
+from db_manager.session import init_db, SessionLocal
+from db_manager.models import FAQ
 from brain.validator import SemanticValidator
-from monitoring.collector import StatsCollector
 
-async def run_load_test(scenario_path: str, user_count: int):
-    # 1. Загружаем сценарий
-    with open(scenario_path, 'r', encoding='utf-8') as f:
-        config_data = yaml.safe_load(f)
-    
-    scenario = Scenario(**config_data)
-    
-    # ПРИОРИТЕТ: берем URL из переменной окружения (для Docker), 
-    # если её нет — из YAML (для локального запуска)
-    target_url = os.getenv("TARGET_URL", scenario.config.base_url)
-    
-    print(f"🚀 Запуск теста: {scenario.name}")
-    print(f"🧠 Инициализация нейропрофиля...")
-    
-    shared_validator = SemanticValidator()
-    stats = StatsCollector()
-    
-    print(f"👥 Создание {user_count} виртуальных пользователей...")
-    print(f"🎯 Целевой URL: {target_url}")
-    print("-" * 30)
+app = FastAPI(title="Bank AI Bot")
 
-    tasks = []
-    for i in range(user_count):
-        user = VirtualUser(
-            user_id=i, 
-            scenario=scenario, 
-            base_url=target_url, 
-            validator=shared_validator,
-            stats=stats
-        )
-        tasks.append(user.run())
+# Глобальный валидатор, чтобы не грузить его на каждый запрос
+VALIDATOR = None
 
-    await asyncio.gather(*tasks)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.on_event("startup")
+async def startup_event():
+    global VALIDATOR
     
-    # Вывод финального отчета
-    stats.print_report()
+    print("🗄️  Подключение к PostgreSQL...")
+    # Цикл ожидания базы (Retry logic)
+    for i in range(10):
+        try:
+            init_db()
+            with SessionLocal() as db:
+                if db.query(FAQ).count() == 0:
+                    print("📝 Наполнение базы данными...")
+                    db.add_all([
+                        FAQ(question="Как открыть счет?", answer="В приложении или отделении с паспортом."),
+                        FAQ(question="Лимит по карте", answer="Стандартный лимит — 500 000 руб. в сутки."),
+                        FAQ(question="Где мой кешбэк?", answer="Начисляется 10-го числа каждого месяца.")
+                    ])
+                    db.commit()
+            print("✅ База данных готова.")
+            break
+        except Exception as e:
+            print(f"🔄 Попытка {i+1}: База еще не доступна, ждем... ({e})")
+            time.sleep(3)
+    else:
+        print("❌ Не удалось подключиться к БД.")
+
+    print("🔥 Прогрев нейросети...")
+    VALIDATOR = SemanticValidator()
+    VALIDATOR.get_similarity("проверка", "тест")
+    print("✅ Система готова к работе.")
+
+@app.get("/ask")
+async def ask_bot(q: str = Query(...), db: Session = Depends(get_db)):
+    """Основной эндпоинт, куда стучит Locust"""
+    # 1. Сначала ищем в базе точное совпадение
+    result = db.query(FAQ).filter(FAQ.question == q).first()
+    
+    if result:
+        return {"answer": result.answer, "source": "postgres"}
+    
+    # 2. Если нет в базе — отдаем дефолт (тут можно прикрутить LLM)
+    return {"answer": "К сожалению, я не нашел точного ответа в базе.", "source": "fallback"}
+
+@app.post("/chat")
+async def chat_endpoint(payload: dict, db: Session = Depends(get_db)):
+    """Альтернативный эндпоинт для POST запросов"""
+    text = payload.get("text", "")
+    return await ask_bot(q=text, db=db)
 
 if __name__ == "__main__":
-    # Можно переопределить путь к сценарию через ENV
-    SCENARIO_FILE = os.getenv("SCENARIO_PATH", "scenarios/example.yaml")
-    USER_LOAD = int(os.getenv("USER_COUNT", 20))
-    
-    try:
-        asyncio.run(run_load_test(SCENARIO_FILE, USER_LOAD))
-    except KeyboardInterrupt:
-        print("\n🛑 Тест прерван")
+    import uvicorn
+    # Запускаем сервер на 0.0.0.0, чтобы он был виден снаружи контейнера
+    uvicorn.run(app, host="0.0.0.0", port=8000)
