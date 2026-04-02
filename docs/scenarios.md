@@ -1,61 +1,57 @@
-# Scenario Configuration Guide 📝🌐
+# Scenario Configuration Guide 📝🌐🌐
 
-Scenarios are the core of **AI Load Tester**. They define the conversation flow and specify how to validate bot responses. Scenarios use a state-machine architecture where each step defines expected user input and logic for the next step.
+Scenarios define the user-AI interaction flow for **AI Load Tester**. They represent a state-machine that guides the virtual users through potential conversation paths.
 
 ## YAML Structure
 
-A scenario file contains three main sections:
-1. `name`: Descriptive name of the test.
-2. `config`: Global settings like `base_url`, `timeout`, and `typing_delay`.
+A scenario file contains:
+1. `name`: Description of the test scenario.
+2. `config`: Global settings (URL, timeout, delay).
 3. `steps`: An array of conversation steps.
-
-### Example Configuration
 
 ```yaml
 name: "Complex Bank Assistant Test"
 config:
-  base_url: "http://localhost:8000/chat"
+  base_url: "http://bank-bot:8000"
   timeout: 5.0
-  typing_delay: [1, 3] # [min, max] delay in seconds
+  typing_delay: [2, 4]
 ```
 
 ## Anatomy of a Step
 
-Each step in the `steps` array has the following properties:
+Each step defines what the user says and how the AI response is validated.
 
-- **`id`**: (Required) A unique identifier for the step.
-- **`user_say`**: (Required) The text the virtual user will send to the bot. Can be a single string or a list of strings (one will be chosen randomly).
-- **`validation`**: (Optional) Rules for evaluating the bot's response.
-- **`on_success`**: (Required) ID of the next step if validation passes. Use `"end"` to terminate the session.
-- **`on_fail`**: (Required) ID of the next step if validation fails.
+- **`id`**: Unique identifier for the step.
+- **`user_say`**: Text or list of texts the user will send to the AI.
+- **`validation`**: Rules for scoring the AI's response (see below).
+- **`on_success`**: ID of the next step if validation passes.
+- **`on_fail`**: ID of the next step if validation fails.
+
+### API Endpoint Note
+
+> [!IMPORTANT]
+> The current **AI Bot** implementation primarily uses the `/ask` GET endpoint. The virtual users automatically append the `user_say` text as the `q` parameter (e.g., `/ask?q=...`).
 
 ### Validation Rules
 
-The `validation` object supports several types of checks:
+AI responses are expected in JSON format: `{"answer": "...", "source": "..."}`.
 
-- **`intent`**: A string representing the expected intent or a canonical response.
-- **`min_similarity`**: (Default: 0.7) The minimum cosine similarity score required for success (using `sentence-transformers`).
-- **`contains`**: A list of strings. If any string in the list is present in the bot's response (case-insensitive), it overrides `intent` validation and marks the step as successful.
+- **`intent`**: The semantic target for similarity scoring.
+- **`min_similarity`**: (Default: 0.7) The threshold for success.
+- **`contains`**: List of strings for keyword-based success.
 
 ```yaml
 validation:
-  intent: "Tell me more about loans."
-  min_similarity: 0.85
-  contains: ["credit", "finance", "%"]
+  intent: "Our interest rates start from 12%."
+  min_similarity: 0.8
 ```
 
-## Flow Control
+## Advanced Flow Control
 
-The `on_success` and `on_fail` properties allow for complex branching:
-
-- **Simple Linear Flow**: Each step points to the next step.
-- **Retry Logic**: If a step fails, it can point back to itself or to a "rephrase" step.
-- **Error Handling**: Failed steps can lead to a specific "termination" step that logs the error properly.
-
-### Special Step IDs
-- `end`: Immediately stops the virtual user session with a success status.
+-   **Retry Logic**: Point `on_fail` to a "rephrase" step to simulate a user trying to clarify their question.
+-   **Terminal States**: Use `on_success: "end"` or `on_fail: "end"` to stop the virtual session.
 
 ---
 
 > [!TIP]
-> Use a list for `user_say` to make the load test more realistic. AI models may behave differently depending on the phrasing of the user's input.
+> Each Locust worker loads the scenario independently from the path defined in the `SCENARIO_PATH` environment variable. Ensure the file is accessible to all worker containers.

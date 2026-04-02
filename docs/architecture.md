@@ -1,43 +1,45 @@
-# Architecture Overview 🏗🏢
+# Architecture Overview 🏗🏢🌐
 
-The **AI Load Tester** is an event-driven system built with Python's `asyncio` for maximum performance and concurrency. It consists of multiple modules, each handling a specific part of the load testing process.
+The **AI Load Tester** is now a full-stack, distributed system featuring a persistent knowledge base and a scalable load testing infrastructure. The system is designed to handle thousands of concurrent AI-user interactions.
+
+## 🗄️ Database Layer (`db_manager/`)
+
+The system now integrates a persistent **PostgreSQL (v15)** database to manage the bot's Knowledge Base.
+
+- **SQLAlchemy ORM**: Used for database interactions, with models defined in `models.py`.
+- **Knowledge Base (FAQ)**: Stores canonical pairs of questions and answers.
+- **Initialization**: The bot automatically checks for database health and populates it with a sample FAQ if empty on startup.
 
 ## 🧠 Brain (`brain/`)
 
-The **Brain** module is the NLP engine of the project. It uses the `sentence-transformers` library to compute semantic similarities between bot responses and expected outcomes.
+The **Brain** module remains the AI engine of the project, compute semantic similarities between bot responses and expected outcomes.
 
-### `SemanticValidator`
-- **Model**: `all-MiniLM-L6-v2` (Lightweight and fast).
-- **Caching**: Results of computing embeddings for repetitive parts (like the expected intent from YAML) are cached to reduce CPU usage.
-- **Cosine Similarity**: Comparing two vectors representing text allows for more precise evaluation than simple regex or keyword matching.
+- **Sentence Embeddings**: Each bot response is compared against the "expected intent" using the lightweight `all-MiniLM-L6-v2` model.
+- **Performance**: In distributed mode, vector computations are performed on the worker nodes, distributing the CPU load and preventing the Locust Master from becoming a bottleneck.
 
-## 👤 Core (`core/`)
+## 🚀 Distributed Scaling (Locust)
 
-The **Core** module manages the simulation of users.
+For massive scale, the tester uses a **Master-Worker** architecture.
 
-### `VirtualUser`
-- Each virtual user is an asynchronous task.
-- **Protocol Agnostic**: The `VirtualUser` communicates with the bot via a configurable protocol (HTTPS by default).
-- **Typing Simulation**: Emulates human typing delays based on the `typing_delay` setting in the scenario.
-- **Persona System**: Assigns each user a "persona" (hurried, detailed, standard) that further adjusts typing speeds and potentially their phrasing.
+### Locust Master
+- Orchestrates the test, synchronizes workers, and collects aggregate statistics.
+- Provides a real-time web dashboard (Port 8089) for monitoring latency, success rates, and semantic score distributions.
 
-## 📊 Monitoring (`monitoring/`)
+### Locust Workers
+- The actual load generators.
+- Each worker executes the code defined in `locustfile.py`.
+- **Horizontal Scaling**: You can scale out the test by adding more worker containers (`docker compose up --scale locust-worker=N`).
 
-The **Monitoring** module captures real-time data from every virtual user's interaction.
+## ⚙️ Service Orchestration (Docker Compose)
 
-### `StatsCollector`
-- Aggregates latency, success/failure counts, and semantic similarity scores.
-- Provides reports in CSV format (`final_report.csv`) for post-test analysis.
-- Detailed logs for each user session are stored in the `reports/` directory.
+The entire stack is managed via a single `docker-compose.yml` file, which includes:
 
-## 🚀 Scaling with Locust
-
-For high-scale testing, the **AI Load Tester** integrates with [Locust.io](https://locust.io/).
-
-- **`locustfile.py`**: A custom implementation that wraps the `VirtualUser` logic into Locust's `HttpUser`.
-- **Parallel Computing**: Vector computations (which can be CPU-intensive) are offloaded to a `ThreadPoolExecutor` to prevent blocking the main Locust event loop.
+1.  **`db`**: PostgreSQL 15 with healthchecks to ensure service readiness.
+2.  **`bank-bot`**: The FastAPI-based AI server.
+3.  **`locust-master`**: The central coordination hub for the load test.
+4.  **`locust-worker`**: Distributed workload generators.
 
 ---
 
 > [!NOTE]
-> The default configuration uses the CPU for vector computations. For extremely large tests, using a CUDA-compatible GPU is recommended.
+> The AI Bot and the Load Tester are separate services. The Bot acts as the **Target App**, while the Locust nodes act as the **Tester**.
