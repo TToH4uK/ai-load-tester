@@ -1,8 +1,7 @@
 fastapi
-uvicorn
-pydantic
-pyyaml
-sentence-transformers
-torch --index-url https://download.pytorch.org/whl/cpu
-psycopg2-binary
+uvicorn[standard]
 sqlalchemy
+psycopg2-binary
+pgvector
+fastembed==0.5.1
+pyyaml

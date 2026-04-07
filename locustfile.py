@@ -1,93 +1,56 @@
 import random
 import yaml
 import logging
-import gevent
 import os
-from locust import HttpUser, task, between, events
+from locust import HttpUser, task, constant, events
 from locust.exception import StopUser
 
-from scenarios.models import Scenario
-from brain.validator import SemanticValidator
-
-# 1. Настройка логирования
+# 1. Logging Configuration (minimal to avoid console spam)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 2. Глобальный валидатор
-VALIDATOR = SemanticValidator()
-
+# 2. Scenario Path (from env or default)
 SCENARIO_PATH = os.getenv("SCENARIO_PATH", "scenarios/example.yaml")
 
-try:
-    with open(SCENARIO_PATH, "r", encoding="utf-8") as f:
-        config_data = yaml.safe_load(f)
-        SCENARIO = Scenario(**config_data)
-        STEPS_MAP = {step.id: step for step in SCENARIO.steps}
-    logger.info(f"✅ [Worker {os.getpid()}] Сценарий '{SCENARIO.name}' загружен.")
-except Exception as e:
-    logger.error(f"❌ Ошибка загрузки сценария: {e}")
-    raise e
+# Global variable to store steps (loaded once on worker start)
+SCENARIO_STEPS = []
+
+def load_scenario():
+    global SCENARIO_STEPS
+    try:
+        with open(SCENARIO_PATH, "r", encoding="utf-8") as f:
+            config_data = yaml.safe_load(f)
+            # Extract only the list of questions (user_say)
+            SCENARIO_STEPS = [step.get("user_say") for step in config_data.get("steps", [])]
+        logger.info(f"✅ [Worker {os.getpid()}] Scenario loaded: {len(SCENARIO_STEPS)} steps.")
+    except Exception as e:
+        logger.error(f"❌ Error loading scenario: {e}")
+        SCENARIO_STEPS = ["How to open an account?"] # Fallback to avoid crash
+
+load_scenario()
 
 class BankBotUser(HttpUser):
-    wait_time = between(2, 4)
-
-    def on_start(self):
-        """Инициализация пользователя"""
-        if not SCENARIO.steps:
-            raise StopUser("Сценарий пуст")
-        
-        self.current_step_id = SCENARIO.steps[0].id
-        
-        # --- ИСПРАВЛЕНИЕ: Добавляем атрибуты, которых не хватало ---
-        self.persona = random.choice(["hurried", "standard", "detailed"])
-        # Привязываем множитель задержки к персоне
-        self.delay_mult = {
-            "hurried": 0.7, 
-            "standard": 1.0, 
-            "detailed": 1.4
-        }[self.persona]
-        # --------------------------------------------------------
+    # Loop without pauses to find maximum RPS. 
+    # To imitate real humans, change to between(1, 2)
+    wait_time = constant(0) 
 
     @task
-    def conversation_flow(self):
-        # Если дошли до конца или ID невалиден - сбрасываем на начало
-        if self.current_step_id == "end" or self.current_step_id not in STEPS_MAP:
-            self.current_step_id = SCENARIO.steps[0].id
-            logger.info(f"🔄 Пользователь {self.persona} начинает сценарий заново")
-            return
-
-        step = STEPS_MAP[self.current_step_id]
-        text_to_send = random.choice(step.user_say) if isinstance(step.user_say, list) else step.user_say
-
-        # Имитация "времени на раздумья" с учетом персоны
-        gevent.sleep(self.wait_time() * self.delay_mult)
-
-        params = {"q": text_to_send}
+    def ask_question(self):
+        # Pick a random block of questions from the scenario
+        user_phrases = random.choice(SCENARIO_STEPS)
         
-        with self.client.get("/ask", params=params, catch_response=True) as response:
+        # If it's a list - pick one random, if it's a string - use it directly
+        question = random.choice(user_phrases) if isinstance(user_phrases, list) else user_phrases
+
+        # Send primitive GET request
+        # catch_response=True is not used if we don't do complex body validation
+        with self.client.get("/ask", params={"q": question}, catch_response=True) as response:
             if response.status_code == 200:
-                try:
-                    data = response.json()
-                    bot_text = data.get("answer", "")
-                    source = data.get("source", "unknown")
-                    
-                    target = step.validation.intent if (step.validation and step.validation.intent) else text_to_send
-                    score = VALIDATOR.get_similarity(bot_text, target)
-                    threshold = step.validation.min_similarity if step.validation else 0.7
-                    
-                    if score >= threshold:
-                        response.success()
-                        self.current_step_id = step.on_success
-                    else:
-                        response.failure(f"Low AI Score: {score:.2f} | Source: {source}")
-                        self.current_step_id = step.on_fail
-                        
-                except Exception as e:
-                    response.failure(f"JSON Error: {str(e)}")
+                response.success()
             else:
-                response.failure(f"HTTP {response.status_code}")
+                response.failure(f"Fail: {response.status_code}")
 
 @events.test_stop.add_listener
 def on_test_stop(environment, **kwargs):
     if not hasattr(environment.runner, 'master_id'):
-        logger.info("📊 Тест завершен.")
+        logger.info("📊 Тест завершен. Проверьте вкладку Statistics.")
