@@ -1,22 +1,22 @@
 import sys
 import os
-import asyncio
-import yaml
 import time
-from fastapi import FastAPI, Depends, Query
+import yaml
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
+from fastembed import TextEmbedding
 
-# Добавляем корень проекта в пути поиска модулей
+# Add paths so Python can see your modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from db_manager.session import init_db, SessionLocal
+from db_manager.session import SessionLocal, init_db
 from db_manager.models import FAQ
-from brain.validator import SemanticValidator
 
-app = FastAPI(title="Bank AI Bot")
+VALIDATOR_MODEL = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
-# Глобальный валидатор, чтобы не грузить его на каждый запрос
-VALIDATOR = None
+app = FastAPI(title="Bank AI Bot Optimized")
+
+# Global variables
 
 def get_db():
     db = SessionLocal()
@@ -26,55 +26,57 @@ def get_db():
         db.close()
 
 @app.on_event("startup")
-async def startup_event():
-    global VALIDATOR
-    
-    print("🗄️  Подключение к PostgreSQL...")
-    # Цикл ожидания базы (Retry logic)
+def startup_event():
+    print("🗄️ Connecting to PostgreSQL...")
+    # Wait for database accessibility
     for i in range(10):
         try:
             init_db()
             with SessionLocal() as db:
                 if db.query(FAQ).count() == 0:
-                    print("📝 Наполнение базы данными...")
+                    print("📝 Populating database with test data...")
                     db.add_all([
-                        FAQ(question="Как открыть счет?", answer="В приложении или отделении с паспортом."),
-                        FAQ(question="Лимит по карте", answer="Стандартный лимит — 500 000 руб. в сутки."),
-                        FAQ(question="Где мой кешбэк?", answer="Начисляется 10-го числа каждого месяца.")
+                        FAQ(question="How to open an account?", answer="In the app or branch with a passport."),
+                        FAQ(question="Card limit", answer="Standard limit is 500,000 RUB per day."),
+                        FAQ(question="Where is my cashback?", answer="Accrued on the 10th of every month.")
                     ])
                     db.commit()
-            print("✅ База данных готова.")
+            print("✅ Database is ready.")
             break
         except Exception as e:
-            print(f"🔄 Попытка {i+1}: База еще не доступна, ждем... ({e})")
+            print(f"🔄 Attempt {i+1}: Database not reachable yet... ({e})")
             time.sleep(3)
-    else:
-        print("❌ Не удалось подключиться к БД.")
 
-    print("🔥 Прогрев нейросети...")
-    VALIDATOR = SemanticValidator()
-    VALIDATOR.get_similarity("проверка", "тест")
-    print("✅ Система готова к работе.")
+    print("🚀 Loading FastEmbed (ONNX Runtime)...")
+    # Using bge-small-en-v1.5 - it is very fast and lightweight
+    print("✅ System fully ready for load testing.")
 
 @app.get("/ask")
-async def ask_bot(q: str = Query(...), db: Session = Depends(get_db)):
-    """Основной эндпоинт, куда стучит Locust"""
-    # 1. Сначала ищем в базе точное совпадение
-    result = db.query(FAQ).filter(FAQ.question == q).first()
-    
-    if result:
-        return {"answer": result.answer, "source": "postgres"}
-    
-    # 2. Если нет в базе — отдаем дефолт (тут можно прикрутить LLM)
-    return {"answer": "К сожалению, я не нашел точного ответа в базе.", "source": "fallback"}
+def ask_bot(q: str, db: Session = Depends(get_db)):
+    if not q:
+        raise HTTPException(status_code=400, detail="Query is empty")
 
-@app.post("/chat")
-async def chat_endpoint(payload: dict, db: Session = Depends(get_db)):
-    """Альтернативный эндпоинт для POST запросов"""
-    text = payload.get("text", "")
-    return await ask_bot(q=text, db=db)
+    try:
+        # Compute query vector
+        query_vector = list(VALIDATOR_MODEL.embed([q]))[0].tolist()
 
-if __name__ == "__main__":
-    import uvicorn
-    # Запускаем сервер на 0.0.0.0, чтобы он был виден снаружи контейнера
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        # Perform vector search
+        best_match = db.query(FAQ).order_by(
+            FAQ.question_vector.cosine_distance(query_vector)
+        ).first()
+
+        if best_match:
+            return {
+                "answer": best_match.answer,
+                "matched_question": best_match.question,
+                "source": "vector_search"
+            }
+        
+        return {"answer": "Sorry, I couldn't find an answer.", "source": "fallback"}
+
+    except Exception as e:
+        print(f"❌ Processing error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+#if __name__ == "__main__":
+#    uvicorn.run("main:app", host="0.0.0.0", port=8000, workers=4)

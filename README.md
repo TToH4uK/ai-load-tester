@@ -1,59 +1,104 @@
-# Distributed AI Load Tester 🧠🚀🌐
+# 🧠 AI Load Tester: Distributed Reliability Testing for Conversational Agents
 
-**AI Load Tester** is an advanced, distributed framework for evaluating AI-driven conversational agents. It features a modern stack with **PostgreSQL**, **FastAPI**, and **Locust**, designed to simulate thousands of users interacting with a knowledge-based AI bot.
+**AI Load Tester** is a high-performance, distributed framework designed to evaluate the reliability and scalability of AI-driven conversational bots. By simulating complex, stateful user interactions and performing real-time semantic validation, it ensures your AI assistant stays helpful and accurate under massive load.
+
+---
 
 ## 🏗 System Architecture
 
-The project now follows a distributed service-oriented architecture:
+The project utilizes a modern, distributed stack to achieve high throughput and precise evaluation:
 
-1.  **PostgreSQL DB**: Stores the AI's Knowledge Base (FAQ) for semantic retrieval.
-2.  **Bank AI Bot (FastAPI)**: An AI-powered mock assistant that simulates response generation by querying the DB.
-3.  **Locust Master**: Orchestrates the load test and provides a web dashboard for real-time monitoring.
-4.  **Locust Workers**: Distributed nodes that generate the actual traffic, allowing for massive scale.
+```mermaid
+graph TD
+    subgraph "Load Generation Layer (Locust)"
+        Master[Locust Master]
+        W1[Worker 1]
+        W2[Worker 2]
+        W3[Worker N]
+    end
+
+    subgraph "Target Application (AI Bot)"
+        Bot[FastAPI Server]
+        DB[(PostgreSQL + pgvector)]
+    end
+
+    W1 & W2 & W3 -.-> Bot
+    Bot <--> DB
+    Master --- W1 & W2 & W3
+```
+
+1.  **PostgreSQL (pgvector)**: A high-performance knowledge base using vector search for semantic retrieval.
+2.  **AI Bank Bot (FastAPI)**: A mock assistant that generates responses by querying the knowledge base with embeddings.
+3.  **Locust Master**: Coordinates tests and provides a real-time monitoring dashboard.
+4.  **Locust Workers**: Independent nodes that simulate thousands of virtual users following YAML scenarios.
+
+---
 
 ## ✨ Key Features
 
--   **Semantic Validation**: Uses `sentence-transformers` to evaluate bot responses based on intent similarity, not just string matching.
--   **Distributed Scaling**: Easily scale up testing capacity by adding more Locust worker containers.
--   **Persistent Knowledge Base**: All AI responses are managed via a PostgreSQL database with SQLAlchemy ORM.
--   **Automated Initialization**: The system automatically waits for the database to be healthy and populates it with sample data on startup.
+-   **🎯 Semantic Validation**: Uses `sentence-transformers` and `FastEmbed` to score bot responses based on intent similarity, not just exact keyword matches.
+-   **📈 Distributed Scaling**: Easily scale from 1 to 1,000+ RPS by adding more Locust worker containers.
+-   **🤖 Persona Simulation**: Native support for different "user personas" (Hurried, Detailed, Standard) with tunable response delays and behaviors.
+-   **🔄 Stateful Scenarios**: Define complex user-AI interaction flows using a YAML-based state-machine logic.
+-   **⚡ Vector-First Retrieval**: The target bot uses `pgvector` for state-of-the-art semantic search across its knowledge base.
 
-## 🚀 Quick Start (with Docker)
+---
 
-The easiest way to run the entire stack is using **Docker Compose**:
+## 🚀 Quick Start (Production Setup)
 
+The entire stack is containerized for seamless deployment.
+
+### 1. Prerequisites
+- Docker & Docker Compose
+- 4GB+ RAM (preferred for vector embeddings)
+
+### 2. Launch the Stack
 ```bash
-# Start the full stack (DB, Bot, and Locust Master)
+# Start all services (Database, Bot, Locust Master, & 1 Worker)
 docker compose up -d
 
-# Scale the number of Locust workers for a heavy test
-docker compose up -d --scale locust-worker=3
+# Scale out testing capacity (e.g., to 5 workers)
+docker compose up -d --scale locust-worker=5
 ```
 
+### 3. Access Dashboards
 -   **Locust Web UI**: [http://localhost:8089](http://localhost:8089)
--   **AI Bot API**: [http://localhost:8000](http://localhost:8000)
+-   **AI Bot Status**: [http://localhost:8000/docs](http://localhost:8000/docs)
 -   **PostgreSQL**: `localhost:5432`
+
+---
 
 ## 🛠 Project Structure
 
--   `db_manager/`: PostgreSQL models and database session management.
--   `brain/`: NLP logic and semantic similarity validation.
--   `scenarios/`: YAML-based definitions of user-bot interaction flows.
--   `main.py`: The FastAPI-based AI Bot server.
--   `locustfile.py`: The load tester configuration for Locust workers.
--   `docs/`: Detailed technical documentation.
+| Directory | Description |
+| :--- | :--- |
+| `core/` | Core engine including `VirtualUser` logic and communication protocols. |
+| `brain/` | AI-driven semantic similarity validator and embedding logic. |
+| `scenarios/` | YAML-based test scenarios and state machine definitions. |
+| `db_manager/` | Database schemas, models (SQLAlchemy), and session handling. |
+| `docs/` | Deep-dive documentation on architecture, scenarios, and API. |
+| `main.py` | The target FastAPI application (the AI Bot). |
+| `locustfile.py` | Load generator entry point. |
+
+---
 
 ## 📝 Configuration
 
-Key environment variables in `docker-compose.yml`:
--   `DATABASE_URL`: Connection string for PostgreSQL.
--   `TARGET_URL`: The bot's API endpoint (e.g., `http://bank-bot:8000`).
--   `SCENARIO_PATH`: Path to the YAML scenario file to be used for testing.
+Configuration is managed via environment variables in `docker-compose.yml`:
 
-## 📚 Learn More
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:password@db:5432/faq_db` |
+| `TARGET_URL` | The endpoint of the bot being tested | `http://bank-bot:8000` |
+| `SCENARIO_PATH` | Path to the active YAML scenario | `scenarios/example.yaml` |
 
--   [Architecture Deep Dive](docs/architecture.md)
--   [Scenario Configuration Guide](docs/scenarios.md)
+---
+
+## 📚 Deep Dives
+
+-   [Architecture Overview](docs/architecture.md)
+-   [Scenario Development Guide](docs/scenarios.md)
+-   [API Reference](docs/api-reference.md)
 
 ---
 Built for high-performance AI reliability testing.

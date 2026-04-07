@@ -1,7 +1,4 @@
---extra-index-url https://download.pytorch.org/whl/cpu
 locust
 pydantic
 PyYAML
 gevent
-sentence-transformers
-torch

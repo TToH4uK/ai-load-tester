@@ -1,7 +1,8 @@
 services:
   # 1. База данных
   db:
-    image: postgres:15
+    # 1. Меняем стандартный образ на образ с поддержкой векторов
+    image: ankane/pgvector:v0.5.1
     container_name: postgres_db
     restart: always
     environment:
@@ -10,8 +11,10 @@ services:
       POSTGRES_DB: knowledge_base
     ports:
       - "5432:5432"
+    # 2. Добавляем команду автоматического включения расширения при старте
+    command: >
+      postgres -c "shared_preload_libraries=vector"
     healthcheck:
-      # Проверка, что база реально готова принимать соединения
       test: [ "CMD-SHELL", "pg_isready -U user -d knowledge_base" ]
       interval: 5s
       timeout: 5s
@@ -25,21 +28,17 @@ services:
       context: .
       dockerfile: Dockerfile.bot
     container_name: bank_bot_container
+    # Добавляем строку запуска здесь:
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+    dns:
+      - 8.8.8.8
     ports:
       - "8000:8000"
-    restart: always
-    environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/knowledge_base
-      # ВАЖНО: Тест внутри бота должен стучать в 127.0.0.1 (себя)
-      - TARGET_URL=http://127.0.0.1:8000
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0'
-          memory: 4G
     depends_on:
       db:
-        condition: service_healthy # Ждем не просто старта, а готовности базы
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/faq_db
 
   # 3. Нагрузочный тестер (Locust)
   locust-master:
