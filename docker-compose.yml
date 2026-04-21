@@ -1,69 +1,28 @@
 services:
-  # 1. База данных
-  db:
-    # 1. Меняем стандартный образ на образ с поддержкой векторов
-    image: ankane/pgvector:v0.5.1
-    container_name: postgres_db
-    restart: always
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: knowledge_base
-    ports:
-      - "5432:5432"
-    # 2. Добавляем команду автоматического включения расширения при старте
-    command: >
-      postgres -c "shared_preload_libraries=vector"
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U user -d knowledge_base" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  # 2. Бот с ИИ
   bank-bot:
     build:
       context: .
       dockerfile: Dockerfile.bot
     container_name: bank_bot_container
-    # Добавляем строку запуска здесь:
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-    dns:
-      - 8.8.8.8
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://user:password@db:5432/faq_db
+    volumes:
+      - ./scenarios:/app/scenarios
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
 
-  # 3. Нагрузочный тестер (Locust)
-  locust-master:
+  locust:
     build:
       context: .
       dockerfile: Dockerfile.locust
-    container_name: locust_master
+    container_name: locust_container
     ports:
       - "8089:8089"
     volumes:
       - .:/mnt/locust
-    # Мастер говорит воркерам стучать в bank-bot по имени сервиса
-    command: -f /mnt/locust/locustfile.py --master --host http://bank-bot:8000
+    command: -f /mnt/locust/locustfile.py --host http://bank-bot:8000
     depends_on:
       - bank-bot
-
-  locust-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.locust
-    volumes:
-      - .:/mnt/locust
-    command: -f /mnt/locust/locustfile.py --worker --master-host locust-master
-    depends_on:
-      - locust-master
-
-volumes:
-  postgres_data:
