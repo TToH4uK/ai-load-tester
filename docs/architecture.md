@@ -4,39 +4,36 @@ The **AI Load Tester** is a modular, distributed system designed to stress-test 
 
 ---
 
-## 🗄️ Database Layer (`db_manager/`)
+## 🤖 Bot Engine Layer (`main.py`)
 
-The system relies on a persistent **PostgreSQL (v15)** database enhanced with the `pgvector` extension for efficient similarity searches.
+The system uses a stateful, YAML-driven bot engine designed for high-performance dialogue management.
 
-- **`pgvector` Integration**: Enables store and query of high-dimensional vectors directly in SQL.
-- **SQLAlchemy ORM**: Provides a clean Pythonic interface for database operations.
-- **Automated Initialization**: On startup, the bot checks for database health and populates a sample Knowledge Base (FAQ) if empty.
-- **Vector Search Logic**:
-  ```sql
-  SELECT * FROM faq ORDER BY question_vector <=> :query_vector LIMIT 1;
-  ```
+- **In-Memory Semantic Indexing**: On startup, the engine parses YAML scenarios and generates embeddings for all possible user phrases using `FastEmbed`.
+- **NumPy Matrix Matching**: Instead of querying an external database, user input is converted to a vector and compared against the current state's transitions using optimized NumPy dot-product operations.
+- **Session Management**: Tracks user progress through the dialogue graph using a session-based state store, enabling multi-turn conversation testing.
+- **Zero-Latency Retrieval**: By keeping the knowledge base (dialogue graph) in memory, the bot can handle thousands of requests per second with sub-millisecond processing time.
 
 ---
 
 ## 🧠 Semantic Validation (`brain/`)
 
-The validation engine ensures that the AI Bot isn't just responding, but responding *correctly* by comparing its output against expected intents.
+The validation logic ensures that the dialogue transitions are accurate by comparing user input against expected "intents" defined in the YAML.
 
-- **Model**: Uses `all-MiniLM-L6-v2` via `sentence-transformers` for a balanced mix of speed and accuracy.
-- **Caching Strategy**: Embeddings for "expected intents" defined in YAML scenarios are cached to minimize redundant CPU usage during high-load tests.
-- **Scoring**: Computes cosine similarity between the bot's response and the target intent. A configurable `min_similarity` threshold determines success.
+- **Model**: Uses `BAAI/bge-small-en-v1.5` (via `FastEmbed`) for state-of-the-art semantic representation.
+- **Threshold-Based Transitions**: Each transition in the dialogue graph can have a custom `min_confidence` score, ensuring the bot only advances when it is certain of the user's intent.
+- **Fallback Logic**: If no transition matches the required threshold, the engine automatically triggers an `on_fail` transition to a rephrase or help state.
 
 ---
 
 ## 👤 Virtual User & Personas (`core/`)
 
-Each simulated user is an independent state-machine that follows a defined YAML scenario.
+Each simulated user in the Load Generation Layer is an independent state-machine that follows a defined YAML scenario.
 
 - **Personas**: To simulate real-world variability, users are assigned one of three personas:
     -   **Standard**: Normal typing speed and delays.
     -   **Hurried**: 0.5x delay multiplier (fast interaction).
     -   **Detailed**: 2.0x delay multiplier (slow, deliberate interaction).
-- **State Machine**: Users track their `current_step_id` and transition based on `on_success` or `on_fail` hooks.
+- **State Machine**: Users track their `current_step_id` and transition based on the bot's response and state indicators.
 
 ---
 
@@ -47,19 +44,17 @@ For massive scale, the tester uses a distributed **Master-Worker** architecture.
 ### Locust Master
 - **Coordination**: Synchronizes workers and aggregates statistics.
 - **Web Dashboard**: Real-time viewing of RPS, failure rates, and response time distributions.
-- **No Load Generation**: The master does not generate traffic, preserving its resources for management.
 
 ### Locust Workers
 - **Workload Generators**: Each worker runs multiple `VirtualUser` instances.
 - **Horizontal Scaling**: Simply add more worker containers to increase the load.
-- **Scenario loading**: Workers load scenarios from the `SCENARIO_PATH` independently.
 
 ---
 
 ## ⚙️ Service Orchestration (Docker)
 
-The stack is orchestrated via `docker-compose.yml`, ensuring that all dependencies (DB, Bot, Master, Workers) are network-linked and healthy before the test begins.
+The stack is orchestrated via `docker-compose.yml`, ensuring that the Bot Engine and Locust nodes are network-linked and healthy before the test begins.
 
 ---
 > [!TIP]
-> When scaling to extreme loads (10,000+ users), ensure your host machine has sufficient CPU for the `sentence-transformers` computations on the worker nodes.
+> When scaling to extreme loads (10,000+ users), ensure your host machine has sufficient CPU for the embedding computations on the bot node.
