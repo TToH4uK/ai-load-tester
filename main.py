@@ -1,82 +1,107 @@
-import sys
 import os
-import time
 import yaml
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
+import uuid
+import logging
+import numpy as np
+from fastapi import FastAPI, HTTPException, Header
+from pydantic import BaseModel
 from fastembed import TextEmbedding
 
-# Add paths so Python can see your modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-from db_manager.session import SessionLocal, init_db
-from db_manager.models import FAQ
+app = FastAPI(title="Pro Stateful Bot Engine")
 
-VALIDATOR_MODEL = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+MODEL = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
-app = FastAPI(title="Bank AI Bot Optimized")
+SCENARIO = {}
+USER_SESSIONS = {}
+VECTOR_CACHE = {} 
 
-# Global variables
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+class ChatRequest(BaseModel):
+    text: str
 
 @app.on_event("startup")
-def startup_event():
-    print("🗄️ Connecting to PostgreSQL...")
-    # Wait for database accessibility
-    for i in range(10):
-        try:
-            init_db()
-            with SessionLocal() as db:
-                if db.query(FAQ).count() == 0:
-                    print("📝 Populating database with test data...")
-                    db.add_all([
-                        FAQ(question="How to open an account?", answer="In the app or branch with a passport."),
-                        FAQ(question="Card limit", answer="Standard limit is 500,000 RUB per day."),
-                        FAQ(question="Where is my cashback?", answer="Accrued on the 10th of every month.")
-                    ])
-                    db.commit()
-            print("✅ Database is ready.")
-            break
-        except Exception as e:
-            print(f"🔄 Attempt {i+1}: Database not reachable yet... ({e})")
-            time.sleep(3)
-
-    print("🚀 Loading FastEmbed (ONNX Runtime)...")
-    # Using bge-small-en-v1.5 - it is very fast and lightweight
-    print("✅ System fully ready for load testing.")
-
-@app.get("/ask")
-def ask_bot(q: str, db: Session = Depends(get_db)):
-    if not q:
-        raise HTTPException(status_code=400, detail="Query is empty")
-
+async def startup():
+    global SCENARIO, VECTOR_CACHE
     try:
-        # Compute query vector
-        query_vector = list(VALIDATOR_MODEL.embed([q]))[0].tolist()
-
-        # Perform vector search
-        best_match = db.query(FAQ).order_by(
-            FAQ.question_vector.cosine_distance(query_vector)
-        ).first()
-
-        if best_match:
-            return {
-                "answer": best_match.answer,
-                "matched_question": best_match.question,
-                "source": "vector_search"
-            }
+        with open("scenarios/example.yaml", "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+            SCENARIO = {step["id"]: step for step in data["steps"]}
         
-        return {"answer": "Sorry, I couldn't find an answer.", "source": "fallback"}
+        logger.info("⏳ Индексация графа диалогов...")
+        for step_id, step in SCENARIO.items():
+            VECTOR_CACHE[step_id] = []
+            for trans in step.get("transitions", []):
+                phrases = trans.get("user_say", [])
+                if isinstance(phrases, str): phrases = [phrases]
+                
+                # Храним векторы как матрицу NumPy для быстрых расчетов
+                phrase_vectors = np.array(list(MODEL.embed(phrases)))
+                
+                VECTOR_CACHE[step_id].append({
+                    "to": trans["to"],
+                    "matrix": phrase_vectors,
+                    # Порог теперь можно вешать на конкретный переход в YAML!
+                    "min_conf": trans.get("min_confidence", 0.7)
+                })
+        logger.info("✅ Движок готов. Жду нагрузку.")
+    except Exception as e:
+        logger.error(f"❌ Ошибка старта: {e}")
+
+@app.post("/chat")
+async def chat(request: ChatRequest, x_session_id: str = Header(None)):
+    try:
+        session_id = x_session_id or str(uuid.uuid4())
+        current_step_id = USER_SESSIONS.get(session_id, "start")
+        
+        if current_step_id not in SCENARIO:
+            current_step_id = "start"
+            
+        step_data = SCENARIO[current_step_id]
+        query_vec = list(MODEL.embed([request.text]))[0]
+
+        best_target = None
+        max_score = 0.0
+        final_threshold = 0.7 # Дефолт
+
+        # МАТРИЧНЫЙ ПОИСК (БЕЗ ЦИКЛОВ ПО ФРАЗАМ)
+        step_transitions = VECTOR_CACHE.get(current_step_id, [])
+        for trans in step_transitions:
+            # Считаем сходство со всеми фразами перехода ОДНИМ махом
+            scores = np.dot(trans["matrix"], query_vec)
+            top_score = np.max(scores)
+            
+            if top_score > max_score:
+                max_score = top_score
+                best_target = trans["to"]
+                final_threshold = trans["min_conf"]
+
+        # Логика перехода
+        if best_target and max_score >= final_threshold:
+            new_step_id = best_target
+            match_status = "✅ MATCH"
+        else:
+            new_step_id = step_data.get("on_fail", current_step_id)
+            match_status = "❌ FALLBACK"
+
+        response_text = SCENARIO.get(new_step_id, {}).get("bot_say", "Ошибка сценария")
+
+        # Логируем для отладки семантики
+        logger.info(f"[{session_id[:6]}] {current_step_id} -> {new_step_id} | In: '{request.text}' | Score: {max_score:.2f} {match_status}")
+
+        # Управление состоянием
+        if SCENARIO.get(new_step_id, {}).get("is_final"):
+            USER_SESSIONS[session_id] = "start"
+        else:
+            USER_SESSIONS[session_id] = new_step_id
+
+        return {
+            "text": response_text,
+            "current_step": new_step_id,
+            "confidence": round(float(max_score), 2)
+        }
 
     except Exception as e:
-        print(f"❌ Processing error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-#if __name__ == "__main__":
-#    uvicorn.run("main:app", host="0.0.0.0", port=8000, workers=4)
+        logger.error(f"💥 Critical: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
