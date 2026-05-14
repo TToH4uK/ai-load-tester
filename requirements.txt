@@ -3,3 +3,4 @@ uvicorn[standard]
 fastembed==0.5.1
 pyyaml
 numpy
+prometheus_fastapi_instrumentator

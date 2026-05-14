@@ -1,28 +1,73 @@
+version: '3.8'
+
 services:
   bank-bot:
     build:
       context: .
       dockerfile: Dockerfile.bot
     container_name: bank_bot_container
-    ports:
-      - "8000:8000"
+    # Убираем все барьеры: бот видит сеть как твой XPS
+    network_mode: "host"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_HUB_READ_TIMEOUT=300
     volumes:
       - ./scenarios:/app/scenarios
+    # Ограничения ресурсов в режиме host работают через cgroups
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '4.0'
+          memory: 4G
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_container
+    # Prometheus остается в bridge, но сможет достучаться до хоста через специальный адрес
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    networks:
+      - bot-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_container
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - bot-net
 
   locust:
     build:
       context: .
       dockerfile: Dockerfile.locust
     container_name: locust_container
-    ports:
-      - "8089:8089"
+    # Locust тоже пускаем в host, чтобы он не тратил ресурсы на NAT при нагрузке
+    network_mode: "host"
     volumes:
       - .:/mnt/locust
-    command: -f /mnt/locust/locustfile.py --host http://bank-bot:8000
-    depends_on:
-      - bank-bot
+    command: -f /mnt/locust/locustfile.py --host http://localhost:8000
+
+networks:
+  bot-net:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
