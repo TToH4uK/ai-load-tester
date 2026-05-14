@@ -1,89 +1,88 @@
 name: "Bank Flow Machine Pro"
 
 steps:
-  # --- СТАРТ (Центральный узел) ---
+  # --- START (Main Menu) ---
   - id: "start"
-    bot_say: "Привет! Я могу оформить кредит, проверить баланс или заблокировать карту. Что выберете?"
+    bot_say: "Hello! I can help you with a loan, check your balance, or block your card. What would you like?"
     transitions:
       - to: "start"
-        user_say: ["привет", "здравствуйте", "начало", "добрый день", "меню"]
+        user_say: ["hello", "hi", "hey", "start", "menu", "good morning"]
       - to: "credit_init"
-        user_say: ["хочу взять кредит", "оформить займ", "кредитование", "нужны наличные", "взять в долг"]
+        user_say: ["i want a loan", "get credit", "need cash", "borrow money", "apply for loan"]
       - to: "balance_check"
-        user_say: ["узнать баланс", "сколько денег на счету", "остаток по карте", "баланс счета"]
+        user_say: ["check balance", "how much money", "account status", "my balance"]
       - to: "card_block_confirm"
-        user_say: ["срочно заблокировать карту", "украли карточку", "потерял карту", "блок карты"]
+        user_say: ["block my card", "lost my card", "stolen card", "card blocking"]
     on_fail: "rephrase_start"
 
-  # --- ВЕТКА: БЛОКИРОВКА ---
+  # --- BRANCH: BLOCKING ---
   - id: "card_block_confirm"
-    bot_say: "Вы уверены, что хотите заблокировать карту?"
+    bot_say: "Are you sure you want to block your card?"
     transitions:
       - to: "card_blocked_final"
-        user_say: ["да", "уверен", "блокируй", "подтверждаю"]
+        user_say: ["yes", "i am sure", "block it", "confirm"]
       - to: "start"
-        user_say: ["нет", "отмена", "не надо", "я передумал"]
-    # Если юзер на этом шаге несет бред (например, шлет сумму), кидаем его в начало
+        user_say: ["no", "cancel", "dont do it", "i changed my mind"]
     on_fail: "start"
 
   - id: "card_blocked_final"
-    bot_say: "Карта заблокирована. Всего доброго!"
+    bot_say: "Your card has been blocked. Have a nice day!"
     is_final: true
 
-  # --- ВЕТКА: КРЕДИТ ---
+  # --- BRANCH: LOAN ---
   - id: "credit_init"
-    bot_say: "Вам нужен кредит наличными или ипотека?"
+    bot_say: "Do you need a personal loan or a mortgage?"
     transitions:
       - to: "loan_check_history"
-        user_say: ["наличные", "потреб", "кредит наличными", "обычный займ"]
+        user_say: ["personal loan", "cash", "need some cash", "ordinary loan"]
       - to: "mortgage_region"
-        user_say: ["ипотека", "квартира", "дом", "жилье в ипотеку"]
+        user_say: ["mortgage", "buy a house", "apartment loan", "home loan"]
     on_fail: "start"
 
   - id: "loan_check_history"
-    bot_say: "У вас были просрочки за последний год?"
+    bot_say: "Have you had any payment delays in the last year?"
     transitions:
       - to: "loan_info"
-        user_say: ["нет", "не было", "чистая история", "все чисто", "никогда"]
+        user_say: ["no", "never", "clear history", "all clean", "no delays"]
       - to: "loan_reject"
-        user_say: ["да", "были", "случалось", "просрочки", "задерживал"]
+        user_say: ["yes", "i had some", "it happened", "delays", "late payments"]
     on_fail: "loan_check_history"
 
   - id: "loan_info"
-    bot_say: "Ставка 12%. Сумма: до 1 млн или больше?"
+    bot_say: "The rate is 12%. Do you need up to 1 million or more?"
     transitions:
       - to: "loan_insurance"
-        user_say: ["до миллиона", "500000", "полмиллиона", "небольшая сумма"]
+        user_say: ["less than a million", "500000", "small amount", "not much"]
       - to: "loan_vip_wait"
-        user_say: ["больше миллиона", "2000000", "много", "огромная сумма"]
+        user_say: ["more than a million", "2000000", "large amount", "huge sum"]
     on_fail: "loan_info"
 
   - id: "loan_insurance"
-    bot_say: "Включим страховку?"
+    bot_say: "Would you like to include insurance?"
     transitions:
       - to: "end_dialog"
-        user_say: ["да", "согласен", "включай", "окей"]
+        user_say: ["yes", "i agree", "include it", "okay"]
       - to: "end_dialog"
-        user_say: ["нет", "не нужно", "без страховки", "отказ"]
+        user_say: ["no", "not needed", "without insurance", "decline"]
     on_fail: "end_dialog"
 
-  # --- ФИНАЛЫ ---
+  # --- FINALS ---
   - id: "loan_reject"
-    bot_say: "К сожалению, отказ. Приходите через 3 месяца."
+    bot_say: "Unfortunately, you were declined. Please try again in 3 months."
     is_final: true
 
   - id: "loan_vip_wait"
-    bot_say: "Для больших сумм ждите звонка менеджера."
+    bot_say: "For large amounts, please wait for a manager's call."
     is_final: true
 
   - id: "mortgage_final"
-    bot_say: "Заявка на ипотеку принята!"
+    bot_say: "Your mortgage application has been accepted!"
     is_final: true
 
   - id: "rephrase_start"
-    bot_say: "Не понял. Напишите: 'кредит', 'баланс' или 'блок'."
+    bot_say: "I didn't understand. Please type: 'loan', 'balance', or 'block'."
     on_fail: "start"
 
   - id: "end_dialog"
-    bot_say: "Спасибо! До свидания!"
+    bot_say: "Thank you! Goodbye!"
     is_final: true
