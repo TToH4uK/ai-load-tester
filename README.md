@@ -23,16 +23,24 @@ graph TD
         YAML[(Scenario YAML)]
     end
 
+    subgraph "Observability"
+        Prometheus[Prometheus]
+        Grafana[Grafana]
+    end
+
     W1 & W2 & W3 -.-> Bot
     Bot <--> Search
     Search <--> YAML
     Master --- W1 & W2 & W3
+    Prometheus -.->|Scrapes| Bot
+    Grafana -.->|Queries| Prometheus
 ```
 
 1.  **AI Bot Engine (FastAPI)**: A stateful assistant that manages user sessions and drives dialogue based on YAML scenarios.
 2.  **In-Memory Vector Search**: Uses `FastEmbed` and `NumPy` for lightning-fast semantic matching of user intents without external database overhead.
 3.  **Locust Master**: Coordinates tests and provides a real-time monitoring dashboard.
 4.  **Locust Workers**: Independent nodes that simulate thousands of virtual users following YAML scenarios.
+5.  **Observability Stack**: Prometheus and Grafana for rich, real-time dashboards of load testing metrics and bot engine performance.
 
 ---
 
@@ -66,6 +74,8 @@ docker compose up -d --scale locust=5
 ### 3. Access Dashboards
 -   **Locust Web UI**: [http://localhost:8089](http://localhost:8089)
 -   **AI Bot Status**: [http://localhost:8000/docs](http://localhost:8000/docs)
+-   **Grafana Dashboards**: [http://localhost:3000](http://localhost:3000)
+-   **Prometheus Targets**: [http://localhost:9090/targets](http://localhost:9090/targets)
 
 ---
 
@@ -76,6 +86,8 @@ docker compose up -d --scale locust=5
 | `core/` | Core engine including `VirtualUser` logic and communication protocols. |
 | `brain/` | Semantic similarity validator and embedding logic. |
 | `scenarios/` | YAML-based test scenarios and state machine definitions. |
+| `grafana/` | Grafana dashboard JSON models and configurations. |
+| `prometheus/` | Prometheus scraping configurations. |
 | `docs/` | Deep-dive documentation on architecture, scenarios, and API. |
 | `main.py` | The target FastAPI application (the Stateful Bot Engine). |
 | `locustfile.py` | Load generator entry point. |
@@ -98,6 +110,7 @@ Configuration is managed via environment variables and volumes:
 -   [Architecture Overview](docs/architecture.md)
 -   [Scenario Development Guide](docs/scenarios.md)
 -   [API Reference](docs/api-reference.md)
+-   [Monitoring & Observability](docs/monitoring.md)
 
 ---
 Built for high-performance AI reliability testing.
