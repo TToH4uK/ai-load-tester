@@ -844,7 +844,7 @@
                 "kind": "Panel",
                 "spec": {
                     "id": 9,
-                    "title": "New panel",
+                    "title": "Accuracy",
                     "description": "",
                     "links": [],
                     "data": {
