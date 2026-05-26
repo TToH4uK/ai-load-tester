@@ -37,17 +37,19 @@ graph TD
 ```
 
 1.  **AI Bot Engine (FastAPI)**: A stateful assistant that manages user sessions and drives dialogue based on YAML scenarios.
-2.  **In-Memory Vector Search**: Uses `FastEmbed` and `NumPy` for lightning-fast semantic matching of user intents without external database overhead.
+2.  **In-Memory Vector Search & Cache**: Uses `FastEmbed` and `NumPy` for lightning-fast semantic matching of user intents without external database overhead, enhanced by a built-in embedding cache.
 3.  **Locust Master**: Coordinates tests and provides a real-time monitoring dashboard.
 4.  **Locust Workers**: Independent nodes that simulate thousands of virtual users following YAML scenarios.
-5.  **Observability Stack**: Prometheus and Grafana for rich, real-time dashboards of load testing metrics and bot engine performance.
+5.  **Observability Stack**: Prometheus, Grafana, and Node Exporter for rich, real-time dashboards of load testing metrics, bot engine performance, NLP quality, and system resource usage.
 
 ---
 
 ## ✨ Key Features
 
 -   **🎯 Semantic Matching**: Uses `FastEmbed` and `NumPy` matrix operations to match user input to the correct dialogue state with high precision.
+-   **🚀 Embedding Caching**: In-memory caching of semantic embeddings to drastically reduce latency and CPU load for repeated queries.
 -   **📈 Distributed Scaling**: Easily scale from 1 to 10,000+ concurrent users by adding more Locust worker containers.
+-   **📊 NLP Quality Metrics**: Real-time tracking of Precision, Recall, and Embedding Cache Hit Ratio via Prometheus and Grafana.
 -   **🤖 Stateful Bot Engine**: Native support for complex, multi-turn conversations with session management via `X-Session-ID`.
 -   **🔄 YAML-Driven Logic**: Define both the bot's behavior and the test scenarios in simple YAML files.
 -   **⚡ High Performance**: No database bottlenecks; all vector indexing and state management happens in-memory for minimal latency.

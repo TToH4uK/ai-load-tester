@@ -9,6 +9,7 @@ The **AI Load Tester** is a modular, distributed system designed to stress-test 
 The system uses a stateful, YAML-driven bot engine designed for high-performance dialogue management.
 
 - **In-Memory Semantic Indexing**: On startup, the engine parses YAML scenarios and generates embeddings for all possible user phrases using `FastEmbed`.
+- **Embedding Caching**: To drastically improve throughput and reduce CPU load, the engine caches the generated vectors of incoming user phrases. Repeated queries bypass the neural network entirely.
 - **NumPy Matrix Matching**: Instead of querying an external database, user input is converted to a vector and compared against the current state's transitions using optimized NumPy dot-product operations.
 - **Session Management**: Tracks user progress through the dialogue graph using a session-based state store, enabling multi-turn conversation testing.
 - **Zero-Latency Retrieval**: By keeping the knowledge base (dialogue graph) in memory, the bot can handle thousands of requests per second with sub-millisecond processing time.
@@ -55,8 +56,9 @@ For massive scale, the tester uses a distributed **Master-Worker** architecture.
 
 The AI Load Tester includes a comprehensive observability stack.
 
-- **Prometheus**: Scrapes load metrics and bot engine performance data directly from the system.
-- **Grafana**: Provides rich, real-time dashboards to visualize virtual user activity, semantic matching confidence scores, latency, and success rates.
+- **Prometheus**: Scrapes load metrics, NLP quality metrics (TP/FP/FN), and bot engine performance data directly from the system.
+- **Node Exporter**: Used to collect host-level system metrics (htop-like CPU, memory usage) to monitor the bot's resource consumption under load.
+- **Grafana**: Provides rich, real-time dashboards to visualize virtual user activity, NLP quality (Precision/Recall), semantic matching confidence scores, embedding cache hit ratios, and system resources.
 
 ---
 

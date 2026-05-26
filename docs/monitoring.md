@@ -1,15 +1,24 @@
 # Monitoring & Observability 📈
 
-The AI Load Tester includes a comprehensive observability stack powered by Prometheus and Grafana, allowing you to monitor bot performance, semantic matching scores, and Locust load metrics in real-time.
+The AI Load Tester includes a comprehensive observability stack powered by Prometheus and Grafana, allowing you to monitor bot performance, semantic matching scores, NLP quality (Precision/Recall), system resources, and Locust load metrics in real-time.
 
 ---
+
+## 🛠 Built-in Metrics & MLops
+
+The system automatically tracks a variety of metrics:
+- **Load Metrics**: Requests per second (RPS), failure rates, and response times (via Locust).
+- **Bot Engine Performance**: Processing latency, semantic matching confidence scores.
+- **NLP Quality Metrics**: Tracks True Positives (TP), False Positives (FP), and False Negatives (FN) to calculate real-time Precision and Recall. This is achieved by passing the expected intent via the `X-Expected-Intent` header from Locust.
+- **Embedding Cache**: Tracks `CACHE_HITS` and `CACHE_MISSES` to calculate the cache Hit Ratio and optimize throughput.
+- **System Resources**: Scrapes `node-exporter` (on port `9101`) to provide htop-like CPU and memory monitoring.
 
 ## 🛠 Adding Custom Metrics
 
 The stack uses Prometheus to scrape metrics. To add a new metric to your testing environment:
 
-1.  **Expose the Metric**: Update your `main.py` (Bot Engine) or `monitoring/` modules to expose Prometheus metrics. You can use libraries like `prometheus_client` to create custom Gauges, Counters, or Histograms (e.g., tracking average semantic confidence scores or latency).
-2.  **Update Prometheus Config**: If you add a new service to scrape, add it to `prometheus/prometheus.yml` under the `scrape_configs` section. (The bot is already accessible via the host network).
+1.  **Expose the Metric**: Update your `main.py` (Bot Engine) or `monitoring/` modules to expose Prometheus metrics. You can use libraries like `prometheus_client` to create custom Gauges, Counters, or Histograms.
+2.  **Update Prometheus Config**: If you add a new service to scrape, add it to `prometheus/prometheus.yml` under the `scrape_configs` section. (The bot and node-exporter are already accessible).
 3.  **Restart Prometheus**: Run `docker compose restart prometheus` to apply the new configuration.
 
 ---
