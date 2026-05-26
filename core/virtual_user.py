@@ -14,8 +14,6 @@ class VirtualUser:
         self.validator = validator
         self.stats = stats 
         
-        # --- ЛОГИКА ПЕРСОНЫ ---
-        # hurried: быстрый (0.5x задержки), detailed: медленный (1.5x задержки)
         self.persona = random.choice(["standard", "hurried", "detailed"])
         self.delay_mult = {"standard": 1.0, "hurried": 0.5, "detailed": 2.0}[self.persona]
         
@@ -30,16 +28,13 @@ class VirtualUser:
             if not step or self.current_step_id == "end":
                 break
 
-            # 1. Выбор фразы (если в YAML список)
             text_to_send = step.user_say
             if isinstance(text_to_send, list):
                 text_to_send = random.choice(text_to_send)
 
-            # 2. Пауза с учетом множителя персоны
             base_delay = random.randint(*self.scenario.config.typing_delay)
             await asyncio.sleep(base_delay * self.delay_mult)
 
-            # 3. Отправка
             result = await self.client.send_message(text_to_send)
 
             score = 0.0

@@ -1,19 +1,17 @@
-version: '3.8'
-
 services:
   bank-bot:
     build:
       context: .
       dockerfile: Dockerfile.bot
     container_name: bank_bot_container
-    # Убираем все барьеры: бот видит сеть как твой XPS
     network_mode: "host"
     environment:
       - PYTHONUNBUFFERED=1
       - HF_HUB_READ_TIMEOUT=300
     volumes:
       - ./scenarios:/app/scenarios
-    # Ограничения ресурсов в режиме host работают через cgroups
+    # Добавили многопоточность, чтобы FastAPI не захлёбывался
+    #command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
     deploy:
       resources:
         limits:
@@ -23,7 +21,6 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus_container
-    # Prometheus остается в bridge, но сможет достучаться до хоста через специальный адрес
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -37,9 +34,28 @@ services:
     networks:
       - bot-net
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_container
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "9101:9101"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)'
+      - '--web.listen-address=:9101'
+    networks:
+      - bot-net
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana_container
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -52,17 +68,38 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards
     networks:
       - bot-net
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
 
-  locust:
+  locust-master:
     build:
       context: .
       dockerfile: Dockerfile.locust
-    container_name: locust_container
-    # Locust тоже пускаем в host, чтобы он не тратил ресурсы на NAT при нагрузке
-    network_mode: "host"
+    container_name: locust_master_container
+    networks:
+      - bot-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/mnt/locust
-    command: -f /mnt/locust/locustfile.py --host http://localhost:8000
+    ports:
+      - "8089:8089"
+    command: -f /mnt/locust/locustfile.py --master --host http://host.docker.internal:8000
+
+  locust-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.locust
+    networks:
+      - bot-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/mnt/locust
+    command: -f /mnt/locust/locustfile.py --worker --master-host locust-master
 
 networks:
   bot-net:

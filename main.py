@@ -31,10 +31,19 @@ TRUE_POSITIVES = Counter("bot_tp_total", "TP")
 FALSE_POSITIVES = Counter("bot_fp_total", "FP")
 FALSE_NEGATIVES = Counter("bot_fn_total", "FN")
 
+# --- Новые метрики для расчета Hit Ratio ---
+CACHE_HITS = Counter("bot_cache_hits_total", "Total number of embedding cache hits")
+CACHE_MISSES = Counter("bot_cache_misses_total", "Total number of embedding cache misses")
+
 MODEL = None
 SCENARIO = {}
 VECTOR_CACHE = {}
 USER_SESSIONS = {}
+
+# --- Кэш для эмбеддингов входящих запросов ---
+# Хранит структуру вида: {"очищенный текст": numpy_array_вектор}
+EMBEDDING_CACHE = {}
+MAX_CACHE_SIZE = 10000
 
 class ChatRequest(BaseModel):
     text: str
@@ -46,7 +55,6 @@ async def startup():
     logger.info("🚀 Сервер запущен. Ожидание загрузки модели...")
 
     try:
-        # Прямая загрузка без проверок
         logger.info("⏳ Скачивание модели BAAI/bge-small-en-v1.5 из Hugging Face...")
         MODEL = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
         logger.info("✅ Модель загружена успешно.")
@@ -71,7 +79,7 @@ async def startup():
         logger.info("✅ Бот полностью готов.")
     except Exception as e:
         logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА СТАРТА: {e}")
-        sys.exit(1) # Выходим, если не смогли загрузиться
+        sys.exit(1)
 
 @app.post("/chat")
 async def chat(request: ChatRequest, x_session_id: str = Header(None), x_expected_intent: str = Header(None)):
@@ -82,10 +90,27 @@ async def chat(request: ChatRequest, x_session_id: str = Header(None), x_expecte
     current_step_id = USER_SESSIONS.get(session_id, "start")
     step_data = SCENARIO.get(current_step_id, SCENARIO.get("start"))
     
-    query_vec = list(MODEL.embed([request.text]))[0]
+    # Нормализуем текст для кэш-ключей (убираем лишние пробелы, приводим к нижнему регистру)
+    clean_text = request.text.strip().lower()
+    
     best_target, max_score, final_threshold = None, 0.0, 0.7
 
+    # Запускаем таймер на весь процесс поиска (включая векторизацию, если она будет)
     with SEARCH_LATENCY.time():
+        # 1. Проверяем кэш эмбеддингов
+        if clean_text in EMBEDDING_CACHE:
+            CACHE_HITS.inc()
+            query_vec = EMBEDDING_CACHE[clean_text]
+        else:
+            CACHE_MISSES.inc()
+            # Генерируем новый вектор через нейросеть
+            query_vec = list(MODEL.embed([request.text]))[0]
+            
+            # Сохраняем вектор в кэш, если лимит не превышен
+            if len(EMBEDDING_CACHE) < MAX_CACHE_SIZE:
+                EMBEDDING_CACHE[clean_text] = query_vec
+
+        # 2. Матричное вычисление косинусного сходства
         for trans in VECTOR_CACHE.get(current_step_id, []):
             scores = np.dot(trans["matrix"], query_vec)
             top_score = np.max(scores)
