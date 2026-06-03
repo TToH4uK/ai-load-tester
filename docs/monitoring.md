@@ -1,5 +1,6 @@
 # Monitoring & Observability 📈
 
+<<<<<<< HEAD
 The AI Load Tester includes a comprehensive observability stack powered by Prometheus and Grafana, allowing you to monitor bot performance, semantic matching scores, NLP quality (Precision/Recall), system resources, and Locust load metrics in real-time.
 
 ---
@@ -17,8 +18,13 @@ The system automatically tracks a variety of metrics:
 
 The stack uses Prometheus to scrape metrics. To add a new metric to your testing environment:
 
+<<<<<<< HEAD
 1.  **Expose the Metric**: Update your `main.py` (Bot Engine) or `monitoring/` modules to expose Prometheus metrics. You can use libraries like `prometheus_client` to create custom Gauges, Counters, or Histograms.
 2.  **Update Prometheus Config**: If you add a new service to scrape, add it to `prometheus/prometheus.yml` under the `scrape_configs` section. (The bot and node-exporter are already accessible).
+=======
+1.  **Expose the Metric**: Update your `main.py` (Bot Engine) or `monitoring/` modules to expose Prometheus metrics. You can use libraries like `prometheus_client` to create custom Gauges, Counters, or Histograms (e.g., tracking average semantic confidence scores or latency).
+2.  **Update Prometheus Config**: If you add a new service to scrape, add it to `prometheus/prometheus.yml` under the `scrape_configs` section. (The bot is already accessible via the host network).
+>>>>>>> 16a32ae3f3251d8af45def2923634bfe262e6ec4
 3.  **Restart Prometheus**: Run `docker compose restart prometheus` to apply the new configuration.
 
 ---

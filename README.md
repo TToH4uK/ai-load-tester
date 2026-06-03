@@ -40,7 +40,6 @@ graph TD
 2.  **In-Memory Vector Search & Cache**: Uses `FastEmbed` and `NumPy` for lightning-fast semantic matching of user intents without external database overhead, enhanced by a built-in embedding cache.
 3.  **Locust Master**: Coordinates tests and provides a real-time monitoring dashboard.
 4.  **Locust Workers**: Independent nodes that simulate thousands of virtual users following YAML scenarios.
-5.  **Observability Stack**: Prometheus, Grafana, and Node Exporter for rich, real-time dashboards of load testing metrics, bot engine performance, NLP quality, and system resource usage.
 
 ---
 

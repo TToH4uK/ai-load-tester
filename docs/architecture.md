@@ -52,16 +52,6 @@ For massive scale, the tester uses a distributed **Master-Worker** architecture.
 
 ---
 
-## 📈 Monitoring & Observability
-
-The AI Load Tester includes a comprehensive observability stack.
-
-- **Prometheus**: Scrapes load metrics, NLP quality metrics (TP/FP/FN), and bot engine performance data directly from the system.
-- **Node Exporter**: Used to collect host-level system metrics (htop-like CPU, memory usage) to monitor the bot's resource consumption under load.
-- **Grafana**: Provides rich, real-time dashboards to visualize virtual user activity, NLP quality (Precision/Recall), semantic matching confidence scores, embedding cache hit ratios, and system resources.
-
----
-
 ## ⚙️ Service Orchestration (Docker)
 
 The stack is orchestrated via `docker-compose.yml`, ensuring that the Bot Engine and Locust nodes are network-linked and healthy before the test begins.
