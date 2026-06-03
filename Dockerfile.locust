@@ -1,18 +1,11 @@
-# 1. Используем официальный образ Locust
 FROM locustio/locust:2.43.3
 
-# 2. Переходим в рабочую директорию внутри контейнера
 WORKDIR /mnt/locust
 
-# 3. Сначала копируем только файл зависимостей (для кэширования)
 COPY requirements-locust.txt .
 
-# 4. Устанавливаем зависимости. 
-# Используем флаг --no-cache-dir, чтобы не раздувать образ
 RUN pip install --no-cache-dir -r requirements-locust.txt
 
-# 5. Копируем все файлы проекта (сценарии тестов и конфиги)
 COPY . .
 
-# 6. Стандартный порт Locust
 EXPOSE 8089

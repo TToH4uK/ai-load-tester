@@ -2,14 +2,10 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Убираем установку системных пакетов, так как они вызывают ошибку сети.
-# Библиотеки для fastembed и numpy обычно уже включены или ставятся через pip wheels.
 COPY requirements.txt .
 
-# Увеличиваем таймаут для pip, если сеть нестабильна
 RUN pip install --no-cache-dir --default-timeout=100 -r requirements.txt
 
 COPY . .
 
-# Оставляем 1 воркер для стабильности отладки
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
